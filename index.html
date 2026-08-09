@@ -399,6 +399,8 @@
       /* ---------------- State ---------------- */
       var worker = null;
       var selectedFile = null;
+      var selectedBuffer = null;
+      var fileReadPromise = null;
       var sourceUrl = null;
       var resultUrl = null;
       var processing = false;
@@ -440,6 +442,36 @@
         errorMessageEl.textContent = message || "Ein unbekannter Fehler ist aufgetreten.";
         errorDetailsEl.textContent = details || "(keine weiteren technischen Details verfügbar)";
         show(errorCard);
+      }
+
+      function readViaFileReader(file) {
+        return new Promise(function (resolve, reject) {
+          var reader = new FileReader();
+          reader.onload = function () {
+            if (reader.result instanceof ArrayBuffer) {
+              resolve(reader.result);
+            } else {
+              reject(new Error("FileReader lieferte keinen ArrayBuffer."));
+            }
+          };
+          reader.onerror = function () {
+            reject(reader.error || new Error("FileReader-Fehler beim Einlesen der Datei."));
+          };
+          reader.onabort = function () {
+            reject(new Error("Einlesen der Datei wurde abgebrochen."));
+          };
+          reader.readAsArrayBuffer(file);
+        });
+      }
+
+      function readFileAsArrayBuffer(file) {
+        // Sofort beim Hochladen einlesen (inkl. FileReader-Fallback gegen NotReadableError)
+        if (typeof file.arrayBuffer === "function") {
+          return file.arrayBuffer().catch(function () {
+            return readViaFileReader(file);
+          });
+        }
+        return readViaFileReader(file);
       }
 
       /* ---------------- Worker ---------------- */
@@ -494,9 +526,15 @@
         updateProgress(0, "Starte…");
         try {
           var w = ensureWorker();
-          selectedFile.arrayBuffer().then(function (buf) {
+          var bufPromise = selectedBuffer
+            ? Promise.resolve(selectedBuffer)
+            : (fileReadPromise || readFileAsArrayBuffer(selectedFile));
+
+          bufPromise.then(function (buf) {
             if (!processing) return; // abgebrochen
-            w.postMessage({ type: "process", file: buf, fileName: selectedFile.name }, [buf]);
+            selectedBuffer = buf;
+            var toSend = buf.slice ? buf.slice(0) : buf;
+            w.postMessage({ type: "process", file: toSend, fileName: selectedFile.name }, [toSend]);
           }).catch(function (err) {
             processing = false;
             showError("Fehler beim Lesen der Datei", String((err && err.message) || err));
@@ -540,6 +578,17 @@
         }
         if (selectedFile && sourceUrl) URL.revokeObjectURL(sourceUrl);
         selectedFile = file;
+        selectedBuffer = null;
+
+        // Datei sofort beim Hochladen als ArrayBuffer einlesen (FileReader-Fallback gegen NotReadableError)
+        fileReadPromise = readFileAsArrayBuffer(file).then(function (buf) {
+          selectedBuffer = buf;
+          return buf;
+        }).catch(function (err) {
+          console.warn("Vorab-Einlesen fehlgeschlagen, wird beim Verarbeiten erneut versucht:", err);
+          return null;
+        });
+
         sourceUrl = URL.createObjectURL(file);
         sourceVideo.src = sourceUrl;
         fileNameEl.textContent = file.name;
@@ -579,6 +628,8 @@
         resultVideo.removeAttribute("src");
         resultVideo.load();
         selectedFile = null;
+        selectedBuffer = null;
+        fileReadPromise = null;
         if (sourceUrl) { URL.revokeObjectURL(sourceUrl); sourceUrl = null; }
         sourceVideo.removeAttribute("src");
         sourceVideo.load();
@@ -601,6 +652,7 @@
         if (worker) { try { worker.terminate(); } catch (_) {} worker = null; }
         if (resultUrl) { URL.revokeObjectURL(resultUrl); resultUrl = null; }
         if (sourceUrl) { URL.revokeObjectURL(sourceUrl); sourceUrl = null; }
+        selectedBuffer = null;
       }
       window.addEventListener("pagehide", cleanup);
       window.addEventListener("beforeunload", cleanup);

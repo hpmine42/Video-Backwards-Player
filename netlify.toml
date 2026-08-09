@@ -1,0 +1,17 @@
+# Video Reverse – Netlify-Konfiguration
+# Es ist KEIN Build nötig und es gibt KEINE Serverfunktionen.
+# Das Projekt ist eine reine statische Website: Bei Netlify einfach
+# das Repository verbinden, Netlify erkennt die statische Seite selbst.
+#
+# Falls gewünscht, lässt sich der "Publish directory" hier festlegen
+# (Standard ist die Repository-Wurzel).
+
+[build]
+  publish = "."
+
+# Sichere, dezente Header – es wird kein externer Server gebraucht.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"

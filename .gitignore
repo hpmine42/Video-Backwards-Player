@@ -1,0 +1,24 @@
+# ---- Node / npm (hier nicht nötig, aber sicherheitshalber) ----
+node_modules/
+npm-debug.log*
+yarn-error.log*
+package-lock.json
+
+# ---- Betriebssystem ----
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Editor / IDE ----
+.vscode/
+.idea/
+*.swp
+*.sublime-project
+*.sublime-workspace
+
+# ---- Logs ----
+*.log
+*.tmp
+
+# ---- Lokale Caches ----
+.cache/

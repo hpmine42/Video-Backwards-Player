@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="Video Reverse – spielen Sie Videos und Ton rückwärts ab. 100 % im Browser, Ihre Datei verlässt nie Ihren Computer." />
+  <meta name="theme-color" content="#05060a" />
+  <title>Video Reverse – Videos rückwärts abspielen</title>
+  <style>
+    /* ============================================================
+       Video Reverse – modernes, Apple-inspiriertes Design
+       Glassmorphism, dunkler Hintergrund, subtile Gradienten
+       ============================================================ */
+
+    :root {
+      --bg: #05060a;
+      --bg-2: #0a0c14;
+      --card: rgba(255, 255, 255, 0.055);
+      --card-strong: rgba(255, 255, 255, 0.08);
+      --border: rgba(255, 255, 255, 0.09);
+      --border-strong: rgba(255, 255, 255, 0.16);
+      --text: #f5f5f7;
+      --text-dim: #b0b0b8;
+      --text-faint: #7a7a85;
+      --accent: #5b8cff;
+      --accent-2: #9a6bff;
+      --accent-3: #ff5e9c;
+      --good: #34d399;
+      --danger: #ff6b6b;
+      --radius-lg: 26px;
+      --radius-md: 18px;
+      --radius-sm: 12px;
+      --shadow-lg: 0 30px 80px -30px rgba(0, 0, 0, 0.85);
+      --shadow-sm: 0 10px 40px -18px rgba(0, 0, 0, 0.8);
+      --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI",
+        Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      min-height: 100%;
+    }
+
+    body {
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(1200px 700px at 85% -10%, rgba(124, 58, 237, 0.22), transparent 60%),
+        radial-gradient(1000px 700px at -10% 10%, rgba(59, 130, 246, 0.18), transparent 55%),
+        radial-gradient(900px 700px at 50% 110%, rgba(236, 72, 153, 0.14), transparent 60%),
+        linear-gradient(180deg, var(--bg-2), var(--bg));
+      background-attachment: fixed;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      line-height: 1.5;
+    }
+
+    /* Animated glowing blobs in the background */
+    .bg-blobs { position: fixed; inset: 0; overflow: hidden; z-index: 0; pointer-events: none; }
+    .blob { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.55; }
+    .blob.a {
+      width: 480px; height: 480px; left: -120px; top: -100px;
+      background: radial-gradient(circle, rgba(124,58,237,0.55), transparent 70%);
+      animation: float 16s ease-in-out infinite;
+    }
+    .blob.b {
+      width: 420px; height: 420px; right: -100px; top: 20%;
+      background: radial-gradient(circle, rgba(59,130,246,0.5), transparent 70%);
+      animation: float 20s ease-in-out infinite reverse;
+    }
+    .blob.c {
+      width: 500px; height: 500px; left: 30%; bottom: -180px;
+      background: radial-gradient(circle, rgba(236,72,153,0.4), transparent 70%);
+      animation: float 24s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      50%      { transform: translate(40px, -30px) scale(1.08); }
+    }
+
+    .app {
+      position: relative;
+      z-index: 1;
+      max-width: 760px;
+      margin: 0 auto;
+      padding: clamp(20px, 5vw, 48px) clamp(16px, 4vw, 32px) 60px;
+    }
+
+    /* ---------- Header ---------- */
+    header { text-align: center; margin-bottom: 34px; animation: fadeUp 0.7s ease both; }
+    .brand {
+      display: inline-flex; align-items: center; gap: 14px;
+      margin-bottom: 6px;
+    }
+    .logo {
+      width: 52px; height: 52px; display: grid; place-items: center;
+      font-size: 30px; color: #fff;
+      border-radius: 16px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 14px 34px -10px rgba(124, 90, 255, 0.7);
+    }
+    h1 { font-size: clamp(30px, 6vw, 44px); font-weight: 700; letter-spacing: -0.02em; margin: 6px 0 0; }
+    .subtitle { color: var(--text-dim); font-size: clamp(15px, 2.5vw, 18px); margin: 8px 0 0; }
+
+    /* ---------- Cards ---------- */
+    .card {
+      position: relative;
+      background: var(--card);
+      -webkit-backdrop-filter: blur(24px) saturate(140%);
+      backdrop-filter: blur(24px) saturate(140%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      padding: clamp(20px, 4vw, 34px);
+      margin-bottom: 22px;
+      animation: fadeUp 0.6s ease both;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(14px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .hidden { display: none !important; }
+
+    /* ---------- Drop zone ---------- */
+    .dropzone {
+      border: 2px dashed var(--border-strong);
+      border-radius: var(--radius-lg);
+      padding: clamp(34px, 8vw, 64px) 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.25s, background 0.25s, transform 0.25s;
+      outline: none;
+    }
+    .dropzone:hover, .dropzone:focus-visible { border-color: var(--accent); background: rgba(91, 140, 255, 0.05); }
+    .dropzone.dragging { border-color: var(--accent-2); background: rgba(154, 107, 255, 0.08); transform: scale(1.01); }
+    .dz-icon {
+      width: 74px; height: 74px; margin: 0 auto 18px; display: grid; place-items: center;
+      font-size: 40px; color: #fff; border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 18px 40px -12px rgba(124, 90, 255, 0.8);
+      animation: pulse 3.2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 18px 40px -12px rgba(124,90,255,0.8); }
+      50%      { box-shadow: 0 18px 52px -8px rgba(124,90,255,1); }
+    }
+    .dz-title { font-size: clamp(20px, 4vw, 26px); font-weight: 600; margin: 0 0 6px; }
+    .dz-or { color: var(--text-faint); margin: 8px 0 16px; }
+    .dz-formats { color: var(--text-faint); font-size: 13px; margin: 18px 0 0; letter-spacing: 0.01em; }
+
+    /* ---------- Buttons ---------- */
+    .btn {
+      font-family: inherit; font-size: 16px; font-weight: 600;
+      color: #fff; border: none; cursor: pointer;
+      border-radius: 999px;
+      padding: 14px 28px;
+      transition: transform 0.15s ease, box-shadow 0.2s ease, opacity 0.2s, background 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      box-shadow: 0 16px 36px -12px rgba(124, 90, 255, 0.75);
+    }
+    .btn-primary:hover:not(:disabled) { box-shadow: 0 20px 46px -12px rgba(124, 90, 255, 0.95); transform: translateY(-1px); }
+
+    .btn-ghost {
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); }
+
+    .btn-block { width: 100%; margin-top: 18px; }
+
+    /* ---------- Source file info ---------- */
+    .file-row {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 16px;
+      background: var(--card-strong);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      margin-bottom: 18px;
+      animation: fadeUp 0.5s ease both;
+    }
+    .file-badge {
+      flex: 0 0 auto; width: 42px; height: 42px; display: grid; place-items: center;
+      font-size: 20px; border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent-3), var(--accent-2));
+      color: #fff;
+    }
+    .file-info { min-width: 0; }
+    .file-name { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-meta { display: block; color: var(--text-faint); font-size: 13px; margin-top: 2px; }
+
+    /* ---------- Video player ---------- */
+    video {
+      width: 100%;
+      border-radius: var(--radius-md);
+      background: #000;
+      border: 1px solid var(--border);
+      display: block;
+      outline: none;
+    }
+    .hint { text-align: center; color: var(--text-faint); font-size: 13px; margin: 16px 0 0; }
+    .hint b { color: var(--text-dim); font-weight: 600; }
+
+    .card-title { margin: 0 0 14px; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+
+    /* ---------- Processing ---------- */
+    .proc-status { text-align: center; font-size: 17px; font-weight: 600; margin: 0 0 20px; min-height: 26px; }
+    .spinner {
+      width: 56px; height: 56px; margin: 4px auto 20px;
+      border-radius: 50%;
+      border: 4px solid rgba(255, 255, 255, 0.12);
+      border-top-color: var(--accent);
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .progress {
+      height: 12px; border-radius: 999px;
+      background: rgba(255, 255, 255, 0.09);
+      overflow: hidden; border: 1px solid var(--border);
+    }
+    .progress-bar {
+      height: 100%; width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3));
+      background-size: 200% 100%;
+      animation: shimmer 2s linear infinite;
+      transition: width 0.3s ease;
+    }
+    @keyframes shimmer { from { background-position: 200% 0; } to { background-position: 0 0; } }
+    .proc-pct { text-align: center; color: var(--text-dim); font-size: 15px; margin: 14px 0 0; font-variant-numeric: tabular-nums; }
+    .proc-cancel-wrap { text-align: center; margin-top: 18px; }
+
+    /* ---------- Result ---------- */
+    .result-name { text-align: center; color: var(--text-faint); font-size: 13px; margin: 14px 0 0; word-break: break-all; }
+
+    /* ---------- Error ---------- */
+    .error-icon {
+      width: 56px; height: 56px; margin: 0 auto 16px; display: grid; place-items: center;
+      font-size: 30px; font-weight: 700; color: #fff; border-radius: 50%;
+      background: linear-gradient(135deg, var(--danger), #ff8f5e);
+      box-shadow: 0 16px 36px -12px rgba(255, 107, 107, 0.7);
+    }
+    #errorCard { text-align: center; border-color: rgba(255, 107, 107, 0.35); }
+    #errorMessage { color: var(--text-dim); margin: 0 auto 6px; max-width: 520px; }
+    details { margin: 18px auto 0; max-width: 560px; text-align: left; }
+    summary { cursor: pointer; color: var(--text-faint); font-size: 14px; user-select: none; }
+    pre {
+      background: rgba(0, 0, 0, 0.5);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      font-size: 11px;
+      line-height: 1.5;
+      color: #d6d6dd;
+      white-space: pre-wrap; word-break: break-word;
+      max-height: 260px; overflow: auto;
+      margin-top: 10px;
+    }
+
+    /* ---------- Footer ---------- */
+    footer {
+      text-align: center; color: var(--text-faint); font-size: 13px;
+      margin-top: 30px; padding-top: 20px; border-top: 1px solid var(--border);
+      animation: fadeUp 0.8s ease both;
+    }
+    footer p { margin: 6px 0; }
+    footer .badge {
+      display: inline-block; padding: 3px 10px; border-radius: 999px;
+      background: rgba(52, 211, 153, 0.14); border: 1px solid rgba(52, 211, 153, 0.35);
+      color: var(--good); font-size: 12px; margin-bottom: 6px;
+    }
+
+    @media (max-width: 520px) {
+      .app { padding-top: 20px; }
+      .card { border-radius: 20px; }
+      .file-row { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+  <div class="bg-blobs" aria-hidden="true">
+    <div class="blob a"></div>
+    <div class="blob b"></div>
+    <div class="blob c"></div>
+  </div>
+
+  <main class="app">
+    <header>
+      <div class="brand">
+        <div class="logo" aria-hidden="true">↶</div>
+      </div>
+      <h1>Video Reverse</h1>
+      <p class="subtitle">Spielen Sie Videos und Ton rückwärts ab – vollständig in Ihrem Browser.</p>
+    </header>
+
+    <!-- ======= Upload ======= -->
+    <section class="card" id="uploadCard">
+      <div id="dropZone" class="dropzone" role="button" tabindex="0"
+           aria-label="Video hierher ziehen oder auswählen">
+        <div class="dz-icon" aria-hidden="true">⬆</div>
+        <p class="dz-title">Video hierher ziehen</p>
+        <p class="dz-or">oder</p>
+        <button type="button" class="btn btn-primary" id="fileBtn">Video auswählen</button>
+        <p class="dz-formats">Unterstützt: MP4 · WebM · MOV · MKV · AVI · M4V · MPEG · 3GP u.&nbsp;a.</p>
+      </div>
+      <input type="file" id="fileInput" accept="video/*,.mp4,.webm,.mov,.mkv,.avi,.m4v,.mpeg,.mpg,.ts,.mts,.3gp,.ogv,.wmv,.flv" hidden />
+    </section>
+
+    <!-- ======= Quelle ======= -->
+    <section class="card hidden" id="sourceCard">
+      <div class="file-row">
+        <div class="file-badge" aria-hidden="true">🎬</div>
+        <div class="file-info">
+          <span class="file-name" id="fileName"></span>
+          <span class="file-meta" id="fileMeta"></span>
+        </div>
+        <button type="button" class="btn btn-ghost" id="changeBtn" style="margin-left:auto; padding:10px 18px; font-size:14px;">Anderes Video</button>
+      </div>
+      <video id="sourceVideo" controls playsinline preload="metadata"></video>
+      <button type="button" class="btn btn-primary btn-block" id="processBtn">↶ Video rückwärts erstellen</button>
+      <p class="hint"><b>🔒 Lokal.</b> Ihre Datei verlässt Ihren Computer nicht – die Verarbeitung passiert im Browser.</p>
+    </section>
+
+    <!-- ======= Verarbeitung ======= -->
+    <section class="card hidden" id="processingCard">
+      <div class="spinner" aria-hidden="true"></div>
+      <p class="proc-status" id="statusText">FFmpeg wird geladen…</p>
+      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressWrap">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <p class="proc-pct" id="progressText">0 %</p>
+      <div class="proc-cancel-wrap">
+        <button type="button" class="btn btn-ghost" id="cancelBtn" style="font-size:14px; padding:10px 22px;">Abbrechen</button>
+      </div>
+    </section>
+
+    <!-- ======= Ergebnis ======= -->
+    <section class="card hidden" id="resultCard">
+      <h2 class="card-title">↶ Fertig – rückwärts!</h2>
+      <video id="resultVideo" controls playsinline></video>
+      <button type="button" class="btn btn-primary btn-block" id="downloadBtn">⬇ Ergebnis herunterladen</button>
+      <p class="result-name" id="resultName"></p>
+      <button type="button" class="btn btn-ghost btn-block" id="againBtn">Noch ein Video umkehren</button>
+    </section>
+
+    <!-- ======= Fehler ======= -->
+    <section class="card error hidden" id="errorCard">
+      <div class="error-icon" aria-hidden="true">!</div>
+      <h2 class="card-title">Etwas ist schiefgelaufen</h2>
+      <p id="errorMessage"></p>
+      <details id="techDetails">
+        <summary>Technische Details</summary>
+        <pre id="errorDetails"></pre>
+      </details>
+      <button type="button" class="btn btn-ghost btn-block" id="errorDismiss">Zurück</button>
+    </section>
+
+    <footer>
+      <p><span class="badge">🔒 100 % datenschutzfreundlich</span></p>
+      <p>Keine Uploads · Keine Server · Keine Analyse · Keine Cookies · Keine persönlichen Daten</p>
+      <p>Die Dateien werden ausschließlich temporär im Browser verarbeitet und nach Abschluss freigegeben.</p>
+    </footer>
+  </main>
+
+  <noscript>
+    <div style="max-width:560px;margin:40px auto;text-align:center;font-family:sans-serif;color:#fff;">
+      Diese Anwendung benötigt JavaScript, um Videos im Browser zu verarbeiten.
+    </div>
+  </noscript>
+
+  <script>
+    (function () {
+      "use strict";
+
+      /* ---------------- DOM ---------------- */
+      var $ = function (id) { return document.getElementById(id); };
+      var dropZone = $("dropZone"), fileInput = $("fileInput"), fileBtn = $("fileBtn");
+      var uploadCard = $("uploadCard"), sourceCard = $("sourceCard");
+      var processingCard = $("processingCard"), resultCard = $("resultCard"), errorCard = $("errorCard");
+      var fileNameEl = $("fileName"), fileMetaEl = $("fileMeta");
+      var sourceVideo = $("sourceVideo"), processBtn = $("processBtn"), changeBtn = $("changeBtn");
+      var statusText = $("statusText"), progressBar = $("progressBar"), progressText = $("progressText");
+      var progressWrap = $("progressWrap");
+      var resultVideo = $("resultVideo"), downloadBtn = $("downloadBtn");
+      var resultNameEl = $("resultName"), againBtn = $("againBtn");
+      var errorMessageEl = $("errorMessage"), errorDetailsEl = $("errorDetails"), errorDismiss = $("errorDismiss");
+      var cancelBtn = $("cancelBtn");
+
+      /* ---------------- State ---------------- */
+      var worker = null;
+      var selectedFile = null;
+      var sourceUrl = null;
+      var resultUrl = null;
+      var processing = false;
+
+      /* ---------------- Helpers ---------------- */
+      function show(id) {
+        uploadCard.classList.add("hidden");
+        sourceCard.classList.add("hidden");
+        processingCard.classList.add("hidden");
+        resultCard.classList.add("hidden");
+        errorCard.classList.add("hidden");
+        id.classList.remove("hidden");
+      }
+
+      function formatBytes(bytes) {
+        if (bytes == null || isNaN(bytes)) return "";
+        if (bytes < 1024) return bytes + " B";
+        var units = ["KB", "MB", "GB", "TB"];
+        var v = bytes, i = -1;
+        do { v /= 1024; i++; } while (v >= 1024 && i < units.length - 1);
+        return v.toFixed(1) + " " + units[i];
+      }
+
+      function isLikelyVideo(file) {
+        if (file.type && file.type.indexOf("video/") === 0) return true;
+        return /\.(mp4|webm|mov|mkv|avi|m4v|mpeg|mpg|ts|mts|3gp|ogv|wmv|flv)$/i.test(file.name || "");
+      }
+
+      function updateProgress(value, text) {
+        var v = Math.max(0, Math.min(100, Math.round(value)));
+        progressBar.style.width = v + "%";
+        progressText.textContent = v + " %";
+        if (progressWrap) progressWrap.setAttribute("aria-valuenow", v);
+        if (text) statusText.textContent = text;
+      }
+
+      function showError(message, details) {
+        processing = false;
+        errorMessageEl.textContent = message || "Ein unbekannter Fehler ist aufgetreten.";
+        errorDetailsEl.textContent = details || "(keine weiteren technischen Details verfügbar)";
+        show(errorCard);
+      }
+
+      /* ---------------- Worker ---------------- */
+      function ensureWorker() {
+        if (worker) return worker;
+        if (typeof Worker === "undefined") {
+          throw new Error("Ihr Browser unterstützt keine Web Worker. Bitte verwenden Sie einen aktuellen Browser (Chrome, Firefox, Edge, Safari).");
+        }
+        try {
+          worker = new Worker("./worker.js");
+        } catch (e) {
+          throw new Error("Die Verarbeitungs-Komponente (worker.js) konnte nicht geladen werden: " + (e && e.message ? e.message : e));
+        }
+        worker.onmessage = onWorkerMessage;
+        worker.onerror = function (e) {
+          if (processing) {
+            showError(
+              "Worker-Fehler",
+              "Der Verarbeitungs-Worker ist unerwartet abgestürzt: " + (e && e.message ? e.message : "unbekannter Fehler")
+            );
+          }
+          processing = false;
+        };
+        return worker;
+      }
+
+      function onWorkerMessage(e) {
+        var data = e.data || {};
+        switch (data.type) {
+          case "progress":
+            updateProgress(data.value, data.text);
+            break;
+          case "log":
+            // FFmpeg-Logzeilen werden bewusst nicht in der Oberfläche
+            // gezeigt; sie stehen bei Fehlern unter "Technische Details".
+            break;
+          case "done":
+            onDone(data);
+            break;
+          case "error":
+            processing = false;
+            showError(data.message, data.details);
+            break;
+        }
+      }
+
+      /* ---------------- Verarbeitung ---------------- */
+      function startProcessing() {
+        if (!selectedFile || processing) return;
+        processing = true;
+        show(processingCard);
+        updateProgress(0, "Starte…");
+        try {
+          var w = ensureWorker();
+          selectedFile.arrayBuffer().then(function (buf) {
+            if (!processing) return; // abgebrochen
+            w.postMessage({ type: "process", file: buf, fileName: selectedFile.name }, [buf]);
+          }).catch(function (err) {
+            processing = false;
+            showError("Fehler beim Lesen der Datei", String((err && err.message) || err));
+          });
+        } catch (err) {
+          processing = false;
+          showError("Fehler", String((err && err.message) || err) + (err && err.stack ? "\n" + err.stack : ""));
+        }
+      }
+
+      function onDone(data) {
+        processing = false;
+        if (!data || !data.data) {
+          showError("Unerwarteter Fehler", "Der Worker hat kein Ergebnis geliefert.");
+          return;
+        }
+        if (resultUrl) { URL.revokeObjectURL(resultUrl); resultUrl = null; }
+        resultUrl = URL.createObjectURL(new Blob([data.data], { type: data.mimeType || "video/mp4" }));
+        resultVideo.src = resultUrl;
+        resultNameEl.textContent = data.fileName || "video-rueckwaerts.mp4";
+        downloadBtn.onclick = function () {
+          var a = document.createElement("a");
+          a.href = resultUrl;
+          a.download = data.fileName || "video-rueckwaerts.mp4";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        };
+        show(resultCard);
+      }
+
+      /* ---------------- Dateiauswahl ---------------- */
+      function onFile(file) {
+        if (!file) return;
+        if (!isLikelyVideo(file)) {
+          showError(
+            "Ungültige Datei",
+            "Bitte wählen Sie eine Videodatei (z. B. MP4, WebM, MOV, MKV, AVI). Diese Datei sieht nicht wie ein Video aus."
+          );
+          return;
+        }
+        if (selectedFile && sourceUrl) URL.revokeObjectURL(sourceUrl);
+        selectedFile = file;
+        sourceUrl = URL.createObjectURL(file);
+        sourceVideo.src = sourceUrl;
+        fileNameEl.textContent = file.name;
+        fileMetaEl.textContent = formatBytes(file.size) + " · " + (file.type || "Video");
+        show(sourceCard);
+        // Den Worker bereits im Hintergrund starten. Das eigentliche
+        // (große) FFmpeg-Paket wird erst beim Klick auf "Erstellen"
+        // geladen, damit keine unnötigen Downloads entstehen.
+        if (!worker) {
+          try { ensureWorker(); } catch (_) { /* Fehler erst beim Verarbeiten melden */ }
+        }
+      }
+
+      /* ---------------- Ereignisse ---------------- */
+      fileBtn.addEventListener("click", function (e) { e.stopPropagation(); fileInput.click(); });
+      dropZone.addEventListener("click", function () { fileInput.click(); });
+      dropZone.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fileInput.click(); }
+      });
+      fileInput.addEventListener("change", function () { onFile(fileInput.files && fileInput.files[0]); fileInput.value = ""; });
+
+      ["dragenter", "dragover"].forEach(function (ev) {
+        dropZone.addEventListener(ev, function (e) { e.preventDefault(); dropZone.classList.add("dragging"); });
+      });
+      ["dragleave", "drop"].forEach(function (ev) {
+        dropZone.addEventListener(ev, function (e) { e.preventDefault(); dropZone.classList.remove("dragging"); });
+      });
+      dropZone.addEventListener("drop", function (e) {
+        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) onFile(f);
+      });
+
+      processBtn.addEventListener("click", startProcessing);
+      changeBtn.addEventListener("click", function () { show(uploadCard); });
+      againBtn.addEventListener("click", function () {
+        if (resultUrl) { URL.revokeObjectURL(resultUrl); resultUrl = null; }
+        resultVideo.removeAttribute("src");
+        resultVideo.load();
+        selectedFile = null;
+        if (sourceUrl) { URL.revokeObjectURL(sourceUrl); sourceUrl = null; }
+        sourceVideo.removeAttribute("src");
+        sourceVideo.load();
+        show(uploadCard);
+      });
+      errorDismiss.addEventListener("click", function () {
+        if (selectedFile) show(sourceCard); else show(uploadCard);
+      });
+
+      // Abbrechen: Worker beenden; beim nächsten Mal wird neu initialisiert.
+      cancelBtn.addEventListener("click", function () {
+        if (worker) { try { worker.terminate(); } catch (_) {} worker = null; }
+        processing = false;
+        updateProgress(0, "");
+        if (selectedFile) show(sourceCard); else show(uploadCard);
+      });
+
+      // Worker sauber beenden, wenn die Seite verlassen wird.
+      function cleanup() {
+        if (worker) { try { worker.terminate(); } catch (_) {} worker = null; }
+        if (resultUrl) { URL.revokeObjectURL(resultUrl); resultUrl = null; }
+        if (sourceUrl) { URL.revokeObjectURL(sourceUrl); sourceUrl = null; }
+      }
+      window.addEventListener("pagehide", cleanup);
+      window.addEventListener("beforeunload", cleanup);
+    })();
+  </script>
+</body>
+</html>

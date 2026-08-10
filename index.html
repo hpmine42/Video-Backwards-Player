@@ -663,12 +663,14 @@
       // genau eine Frame-Dauer zurückspulen. Ergebnis: flüssiges
       // Rückwärts-Abspielen direkt im Browser.
       var reverseMode = false;
-      var reverseTickTimer = null;  // einziger Timer-Slot für den nächsten Schritt
+      var reverseTickTimer = null;  // einziger Timer-Slot (nur für kleine Wartezeiten)
       var reverseWatchdog = null;   // Sicherheitsnetz, falls 'seeked' ausbleibt
       var reverseSeeking = false;
-      var reverseLastSeekStart = 0;
-      var reverseStep = 1 / 30;     // Sekunden pro Schritt (Standard 30 fps)
-      var reverseSkip = 1;          // adaptive Überspring-Faktoren bei langsamen Seeks
+      var reverseLastStepStart = 0; // performance.now() beim Beginn des letzten Seeks
+      var reverseVisibleAtSeek = 0; // sichtbare Position beim Beginn des letzten Seeks
+      var reverseStep = 1 / 30;     // Sekunden pro Frame (Standard 30 fps)
+      var reverseSkip = 1;          // adaptive Schrittweite in Frames
+      var MAX_SKIP = 60;            // Notbremse: max. Frames pro Schritt
       var reversePrevMuted = false;
       var END_EPS = 0.05;           // kleiner Abstand zum Videoende (verhindert 'ended')
       var lastVfcMedia = null;      // letzte mediaTime aus requestVideoFrameCallback
@@ -691,45 +693,74 @@
         reverseTickTimer = setTimeout(doReverseStep, ms);
       }
 
+      // Führt genau EINEN Rückwärts-Sprung aus. Die Schrittweite wird im
+      // 'seeked'-Handler (onSeeked) aus der gemessenen Zykluszeit gesetzt.
       function doReverseStep() {
         if (!reverseMode) return;
         var v = sourceVideo;
-        // Pausiert, am Suchen oder ohne gültige Dauer? Dann warten.
-        if (v.paused || v.seeking || !isFinite(v.duration) || v.duration <= 0) {
-          scheduleReverseTick(60);
+        if (v.seeking) { scheduleReverseTick(30); return; } // fremder/anderer Seek läuft
+        if (!isFinite(v.duration) || v.duration <= 0) { scheduleReverseTick(80); return; }
+        if (v.paused) {
+          // pausiert → warten; Zeitstempel frisch halten, damit nach dem
+          // Resume kein übergroßer Sprung entsteht.
+          reverseLastStepStart = performance.now();
+          scheduleReverseTick(100);
           return;
         }
+
+        var now = performance.now();
         var next = v.currentTime - reverseStep * reverseSkip;
         var target = next <= 0 ? Math.max(0, v.duration - END_EPS) : next; // Schleife: wieder von hinten
-        if (target === v.currentTime) {
-          scheduleReverseTick(60); // Position unverändert → kurz warten
-          return;
-        }
-        v.currentTime = target;
-        reverseLastSeekStart = performance.now();
+        if (Math.abs(target - v.currentTime) < 0.0005) { scheduleReverseTick(50); return; }
+
+        reverseVisibleAtSeek = v.currentTime; // sichtbare Position vor dem Sprung
+        reverseLastStepStart = now;
         reverseSeeking = true;
-        // Watchdog: falls 'seeked' nicht (rechtzeitig) kommt, weitermachen.
+        v.currentTime = target;
+        // Watchdog: falls 'seeked' nicht (rechtzeitig) kommt, Seek neu anstoßen.
         clearTimeout(reverseWatchdog);
         reverseWatchdog = setTimeout(function () {
-          if (reverseMode && reverseSeeking) {
-            reverseSeeking = false;
-            scheduleReverseTick(40);
-          }
-        }, 500);
+          if (!reverseMode) return;
+          reverseSeeking = false;
+          reverseLastStepStart = performance.now();
+          doReverseStep();
+        }, 1500);
       }
 
-      sourceVideo.addEventListener("seeked", function () {
+      // Nach jedem abgeschlossenen Seek: Tempo anhand der gemessenen
+      // Zykluszeit (≈ Seek-Dauer) so regeln, dass die Rückwärtsgeschwindigkeit
+      // IMMER ≈ 1× Echtzeit ist – egal wie langsam der Browser sucht.
+      // Während eines Seeks ist currentTime eingefroren; Vorwärts-Drift
+      // entsteht nur in Warte-Fenstern. Also: Sprung ≈ Zykluszeit; ist die
+      // Zykluszeit kleiner als ein Frame, halbe Wartezeit dazurechnen.
+      function onSeeked() {
         if (!reverseMode) return;
         clearTimeout(reverseWatchdog);
         reverseSeeking = false;
-        var seekMs = performance.now() - reverseLastSeekStart;
+        var cycleMs = performance.now() - reverseLastStepStart;
         var frameMs = reverseStep * 1000;
-        // Adaptive Steuerung: langsame Seeks → Frames überspringen,
-        // schnelle Seeks → wieder dichter an der Original-Framerate.
-        if (seekMs > frameMs * 1.4 && reverseSkip < 4) reverseSkip += 0.5;
-        else if (seekMs < frameMs * 0.8 && reverseSkip > 1) reverseSkip -= 0.5;
-        var wait = Math.max(24, frameMs - seekMs);
-        scheduleReverseTick(wait);
+
+        if (cycleMs > 0 && cycleMs < frameMs) {
+          // Schnelle Seeks: 1-Frame-Sprünge mit kurzer Wartezeit für exakt 1×.
+          reverseSkip = 1;
+          var waitMs = (frameMs - cycleMs) / 2;
+          scheduleReverseTick(Math.max(2, waitMs));
+          return;
+        }
+        if (cycleMs >= frameMs) {
+          // Langsame Seeks: entsprechend mehr Frames pro Sprung.
+          reverseSkip = Math.min(MAX_SKIP, (cycleMs / frameMs) * 1.05);
+        }
+        doReverseStep(); // sofort weiter – keine künstliche Wartezeit
+      }
+
+      sourceVideo.addEventListener("seeked", onSeeked);
+
+      // Wenn der Nutzer pausiert und wieder auf Play drückt, direkt weitermachen.
+      sourceVideo.addEventListener("play", function () {
+        if (!reverseMode || sourceVideo.paused) return;
+        reverseLastStepStart = performance.now();
+        scheduleReverseTick(10);
       });
 
       function updateLiveBadge() {
@@ -755,14 +786,15 @@
           if (!reverseMode) return;
           try {
             var v = sourceVideo;
-            if (!isFinite(v.duration) || v.duration <= 0) return;
+            if (!isFinite(v.duration) || v.duration <= 0) { scheduleReverseTick(100); return; }
+            reverseLastStepStart = performance.now();
             if (v.ended || v.currentTime <= 0.01) {
-              // ans Ende springen; der 'seeked'-Handler bzw. der Kickstart
-              // unten starten danach den Rückwärts-Loop.
+              // ans Ende springen; der 'seeked'-Handler startet danach den Loop
               v.currentTime = Math.max(0, v.duration - END_EPS);
-              scheduleReverseTick(120);
+              scheduleReverseTick(5); // Fallback, falls 'seeked' sehr langsam kommt
             } else {
-              scheduleReverseTick(40);
+              // mitten im Video → sofort loslegen, ohne künstliche Wartezeit
+              doReverseStep();
             }
             v.play().catch(function () { /* stumm → Autoplay ist erlaubt */ });
           } catch (_) { /* Vorschaumodus ist optional – Fehler hier nicht fatal */ }
@@ -783,6 +815,11 @@
         reverseTickTimer = null;
         reverseWatchdog = null;
         reverseSeeking = false;
+        // Noch laufenden Seek zurück auf die zuletzt sichtbare Position
+        // parken, damit das Video beim Stoppen nicht nachspringt.
+        try {
+          if (sourceVideo.seeking) sourceVideo.currentTime = reverseVisibleAtSeek;
+        } catch (_) {}
         sourceVideo.muted = reversePrevMuted;
         liveBadge.classList.add("hidden");
         reversePreviewBtn.textContent = "⏪ Live rückwärts ansehen";

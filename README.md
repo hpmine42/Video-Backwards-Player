@@ -135,7 +135,8 @@ Neben der Konvertierung gibt es einen **Sofort-Vorschaumodus**: Mit „⏪ Live 
 So funktioniert es technisch:
 
 - Das Video-Element läuft **vorwärts**, während die Seite es permanent um genau eine **Frame-Dauer zurückspult** (`currentTime`-Seeking). Das ergibt flüssiges Rückwärts-Abspielen.
-- Die Framerate wird automatisch erkannt: Beim normalen Abspielen misst `requestVideoFrameCallback` die echte Frame-Dauer; sonst gilt 30 fps als Standard. Bei langsamen Seeks überspringt die Engine adaptiv Frames, damit das Tempo stimmt.
+- Die Framerate wird automatisch erkannt: Beim normalen Abspielen misst `requestVideoFrameCallback` die echte Frame-Dauer; sonst gilt 30 fps als Standard.
+- Das Tempo wird **in Echtzeit geregelt**: Nach jedem Seek wird die tatsächliche Seek-Dauer gemessen und die Sprungweite daraus berechnet – die Rückwärtsgeschwindigkeit bleibt dadurch **immer ≈ 1× Echtzeit**, auch bei langsamen Seeks (dann werden entsprechend größere Sprünge gemacht).
 - Erreicht die Wiedergabe den Anfang, **loopt** sie zurück ans Videoende (Rückwärts-Loop).
 - **Ton** ist in der Live-Vorschau stummgeschaltet, weil sich Audio nicht per Seeking umkehren lässt. Rückwärts abgespielten Ton liefert die konvertierte Datei („↶ Video rückwärts erstellen").
 - Die Vorschau endet automatisch beim Kartenwechsel, beim Start der Konvertierung oder beim Verlassen der Seite.

@@ -12,7 +12,7 @@ Spiele **Video und Ton rückwärts** ab – bequem im Browser. Lade ein beliebig
 - ⏪ **Video rückwärts** (`reverse`) **und Audio rückwärts** (`areverse`).
 - 🔇 Videos **ohne Audiospur** werden automatisch erkannt und trotzdem verarbeitet.
 - 🎥 Unterstützt gängige Formate: **MP4, WebM, MOV, MKV, AVI, M4V, MPEG, 3GP** u. a. – alles, was FFmpeg.wasm lesen kann.
-- 🖼️ **Hohe Qualität:** Auflösung, Seitenverhältnis und Framerate bleiben erhalten; Re-Encoding mit `libx264` / `crf 17` (sehr geringe Kompression), `aac` 192 kbit/s, `+faststart`.
+- 🖼️ **Hohe Qualität & schnell:** Auflösung, Seitenverhältnis und Framerate bleiben erhalten; Re-Encoding mit `libx264` / `crf 17` (sehr geringe Kompression) und dem **schnellen Preset `veryfast`**, `aac` 192 kbit/s, `+faststart`.
 - ▶️ Ergebnis direkt im Browser **ansehen** und als **MP4 herunterladen**.
 - ⏪ **Live-Rückwärts-Vorschau:** das Video direkt im Browser sofort rückwärts ansehen – **ohne Wartezeit** und ohne Konvertierung (Bild; Ton gibt es rückwärts in der konvertierten Datei).
 - 🖱️ **Drag & Drop** oder Dateiauswahl.
@@ -103,7 +103,7 @@ Alle Pfade in diesem Projekt sind **relativ** (`./worker.js`), sodass auch Unter
    -map 0:a:0?
    -vf reverse
    -af areverse
-   -c:v libx264 -crf 17 -preset medium -pix_fmt yuv420p
+   -c:v libx264 -crf 17 -preset veryfast -pix_fmt yuv420p
    -c:a aac -b:a 192k
    -movflags +faststart
    output.mp4

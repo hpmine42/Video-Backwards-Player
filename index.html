@@ -210,6 +210,50 @@
     .hint { text-align: center; color: var(--text-faint); font-size: 13px; margin: 16px 0 0; }
     .hint b { color: var(--text-dim); font-weight: 600; }
 
+    /* ---------- Rückwärts-Live-Vorschau ---------- */
+    .video-wrap { position: relative; }
+    .live-badge {
+      position: absolute; top: 12px; right: 12px; z-index: 2;
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 6px 12px; border-radius: 999px;
+      background: rgba(5, 6, 10, 0.72);
+      -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 94, 156, 0.5);
+      color: #fff; font-size: 12px; font-weight: 600; letter-spacing: 0.03em;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    .live-badge .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent-3);
+      box-shadow: 0 0 10px var(--accent-3);
+      animation: blink 1.1s ease-in-out infinite;
+    }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+    .preview-row { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .btn-reverse {
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent-3), var(--accent-2));
+      box-shadow: 0 16px 36px -12px rgba(255, 94, 156, 0.7);
+    }
+    .btn-reverse:hover:not(:disabled) {
+      box-shadow: 0 20px 46px -12px rgba(255, 94, 156, 0.95);
+      transform: translateY(-1px);
+    }
+    .btn-reverse.btn-active-reverse {
+      background: rgba(255, 94, 156, 0.16);
+      border: 1px solid rgba(255, 94, 156, 0.55);
+      color: #ff9ec0;
+      box-shadow: none;
+    }
+    .btn-reverse.btn-active-reverse:hover:not(:disabled) {
+      background: rgba(255, 94, 156, 0.24);
+      box-shadow: none;
+    }
+    .preview-note { color: var(--text-faint); font-size: 13px; margin: 0; line-height: 1.55; }
+    .preview-note b { color: var(--text-dim); font-weight: 600; }
+
     .card-title { margin: 0 0 14px; font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
 
     /* ---------- Processing ---------- */
@@ -326,7 +370,16 @@
         </div>
         <button type="button" class="btn btn-ghost" id="changeBtn" style="margin-left:auto; padding:10px 18px; font-size:14px;">Anderes Video</button>
       </div>
-      <video id="sourceVideo" controls playsinline preload="metadata"></video>
+      <div class="video-wrap">
+        <video id="sourceVideo" controls playsinline preload="metadata"></video>
+        <div class="live-badge hidden" id="liveBadge" aria-hidden="true">
+          <span class="dot"></span><span id="liveBadgeText">Live rückwärts</span>
+        </div>
+      </div>
+      <div class="preview-row">
+        <button type="button" class="btn btn-reverse" id="reversePreviewBtn">⏪ Live rückwärts ansehen</button>
+        <p class="preview-note">Sofortige Vorschau direkt im Browser – <b>ohne Wartezeit</b> und ohne Konvertierung. Hinweis: Der Ton ist in der Live-Vorschau stummgeschaltet; rückwärts abgespielten Ton liefert die konvertierte Datei.</p>
+      </div>
       <button type="button" class="btn btn-primary btn-block" id="processBtn">↶ Video rückwärts erstellen</button>
       <p class="hint"><b>🔒 Lokal.</b> Ihre Datei verlässt Ihren Computer nicht – die Verarbeitung passiert im Browser.</p>
     </section>
@@ -395,6 +448,7 @@
       var resultNameEl = $("resultName"), againBtn = $("againBtn");
       var errorMessageEl = $("errorMessage"), errorDetailsEl = $("errorDetails"), errorDismiss = $("errorDismiss");
       var cancelBtn = $("cancelBtn");
+      var reversePreviewBtn = $("reversePreviewBtn"), liveBadge = $("liveBadge"), liveBadgeText = $("liveBadgeText");
 
       /* ---------------- State ---------------- */
       var worker = null;
@@ -407,6 +461,7 @@
 
       /* ---------------- Helpers ---------------- */
       function show(id) {
+        stopReversePreview(); // Live-Vorschau beenden, wenn die Karte wechselt
         uploadCard.classList.add("hidden");
         sourceCard.classList.add("hidden");
         processingCard.classList.add("hidden");
@@ -602,6 +657,138 @@
         }
       }
 
+      /* ---------------- Rückwärts-Live-Vorschau ---------------- */
+      // Spielt das Quellvideo SOFORT rückwärts ab (Bild), ohne FFmpeg:
+      // Das Video-Element läuft vorwärts, während wir es permanent um
+      // genau eine Frame-Dauer zurückspulen. Ergebnis: flüssiges
+      // Rückwärts-Abspielen direkt im Browser.
+      var reverseMode = false;
+      var reverseTickTimer = null;  // einziger Timer-Slot für den nächsten Schritt
+      var reverseWatchdog = null;   // Sicherheitsnetz, falls 'seeked' ausbleibt
+      var reverseSeeking = false;
+      var reverseLastSeekStart = 0;
+      var reverseStep = 1 / 30;     // Sekunden pro Schritt (Standard 30 fps)
+      var reverseSkip = 1;          // adaptive Überspring-Faktoren bei langsamen Seeks
+      var reversePrevMuted = false;
+      var END_EPS = 0.05;           // kleiner Abstand zum Videoende (verhindert 'ended')
+      var lastVfcMedia = null;      // letzte mediaTime aus requestVideoFrameCallback
+      var knownFrameDuration = null; // gelernte Frame-Dauer (falls messbar)
+
+      // Frame-Dauer aus der NORMALEN Wiedergabe lernen (requestVideoFrameCallback).
+      if (typeof sourceVideo.requestVideoFrameCallback === "function") {
+        sourceVideo.requestVideoFrameCallback(function vfc(now, meta) {
+          if (lastVfcMedia !== null) {
+            var d = meta.mediaTime - lastVfcMedia;
+            if (d > 0.001 && d < 2) knownFrameDuration = d; // 0,5 … 1000 fps plausibel
+          }
+          lastVfcMedia = meta.mediaTime;
+          sourceVideo.requestVideoFrameCallback(vfc);
+        });
+      }
+
+      function scheduleReverseTick(ms) {
+        clearTimeout(reverseTickTimer);
+        reverseTickTimer = setTimeout(doReverseStep, ms);
+      }
+
+      function doReverseStep() {
+        if (!reverseMode) return;
+        var v = sourceVideo;
+        // Pausiert, am Suchen oder ohne gültige Dauer? Dann warten.
+        if (v.paused || v.seeking || !isFinite(v.duration) || v.duration <= 0) {
+          scheduleReverseTick(60);
+          return;
+        }
+        var next = v.currentTime - reverseStep * reverseSkip;
+        var target = next <= 0 ? Math.max(0, v.duration - END_EPS) : next; // Schleife: wieder von hinten
+        if (target === v.currentTime) {
+          scheduleReverseTick(60); // Position unverändert → kurz warten
+          return;
+        }
+        v.currentTime = target;
+        reverseLastSeekStart = performance.now();
+        reverseSeeking = true;
+        // Watchdog: falls 'seeked' nicht (rechtzeitig) kommt, weitermachen.
+        clearTimeout(reverseWatchdog);
+        reverseWatchdog = setTimeout(function () {
+          if (reverseMode && reverseSeeking) {
+            reverseSeeking = false;
+            scheduleReverseTick(40);
+          }
+        }, 500);
+      }
+
+      sourceVideo.addEventListener("seeked", function () {
+        if (!reverseMode) return;
+        clearTimeout(reverseWatchdog);
+        reverseSeeking = false;
+        var seekMs = performance.now() - reverseLastSeekStart;
+        var frameMs = reverseStep * 1000;
+        // Adaptive Steuerung: langsame Seeks → Frames überspringen,
+        // schnelle Seeks → wieder dichter an der Original-Framerate.
+        if (seekMs > frameMs * 1.4 && reverseSkip < 4) reverseSkip += 0.5;
+        else if (seekMs < frameMs * 0.8 && reverseSkip > 1) reverseSkip -= 0.5;
+        var wait = Math.max(24, frameMs - seekMs);
+        scheduleReverseTick(wait);
+      });
+
+      function updateLiveBadge() {
+        if (!liveBadge || !liveBadgeText) return;
+        liveBadgeText.textContent = knownFrameDuration
+          ? "Live rückwärts · " + Math.max(1, Math.round(1 / knownFrameDuration)) + " fps"
+          : "Live rückwärts";
+      }
+
+      function startReversePreview() {
+        if (reverseMode || !sourceVideo.src) return;
+        reverseMode = true;
+        reverseSkip = 1;
+        reverseStep = knownFrameDuration || 1 / 30;
+        reversePrevMuted = sourceVideo.muted;
+        sourceVideo.muted = true; // Ton ist live nicht umkehrbar
+        updateLiveBadge();
+        liveBadge.classList.remove("hidden");
+        reversePreviewBtn.textContent = "⏹ Normale Wiedergabe";
+        reversePreviewBtn.classList.add("btn-active-reverse");
+
+        var start = function () {
+          if (!reverseMode) return;
+          try {
+            var v = sourceVideo;
+            if (!isFinite(v.duration) || v.duration <= 0) return;
+            if (v.ended || v.currentTime <= 0.01) {
+              // ans Ende springen; der 'seeked'-Handler bzw. der Kickstart
+              // unten starten danach den Rückwärts-Loop.
+              v.currentTime = Math.max(0, v.duration - END_EPS);
+              scheduleReverseTick(120);
+            } else {
+              scheduleReverseTick(40);
+            }
+            v.play().catch(function () { /* stumm → Autoplay ist erlaubt */ });
+          } catch (_) { /* Vorschaumodus ist optional – Fehler hier nicht fatal */ }
+        };
+
+        if (sourceVideo.readyState >= 1 && isFinite(sourceVideo.duration)) {
+          start();
+        } else {
+          sourceVideo.addEventListener("loadedmetadata", start, { once: true });
+        }
+      }
+
+      function stopReversePreview() {
+        if (!reverseMode) return;
+        reverseMode = false;
+        clearTimeout(reverseTickTimer);
+        clearTimeout(reverseWatchdog);
+        reverseTickTimer = null;
+        reverseWatchdog = null;
+        reverseSeeking = false;
+        sourceVideo.muted = reversePrevMuted;
+        liveBadge.classList.add("hidden");
+        reversePreviewBtn.textContent = "⏪ Live rückwärts ansehen";
+        reversePreviewBtn.classList.remove("btn-active-reverse");
+      }
+
       /* ---------------- Ereignisse ---------------- */
       fileBtn.addEventListener("click", function (e) { e.stopPropagation(); fileInput.click(); });
       dropZone.addEventListener("click", function () { fileInput.click(); });
@@ -622,7 +809,14 @@
       });
 
       processBtn.addEventListener("click", startProcessing);
-      changeBtn.addEventListener("click", function () { show(uploadCard); });
+      reversePreviewBtn.addEventListener("click", function () {
+        if (reverseMode) stopReversePreview();
+        else startReversePreview();
+      });
+      changeBtn.addEventListener("click", function () {
+        sourceVideo.pause();
+        show(uploadCard);
+      });
       againBtn.addEventListener("click", function () {
         if (resultUrl) { URL.revokeObjectURL(resultUrl); resultUrl = null; }
         resultVideo.removeAttribute("src");
@@ -649,6 +843,7 @@
 
       // Worker sauber beenden, wenn die Seite verlassen wird.
       function cleanup() {
+        stopReversePreview();
         if (worker) { try { worker.terminate(); } catch (_) {} worker = null; }
         if (resultUrl) { URL.revokeObjectURL(resultUrl); resultUrl = null; }
         if (sourceUrl) { URL.revokeObjectURL(sourceUrl); sourceUrl = null; }

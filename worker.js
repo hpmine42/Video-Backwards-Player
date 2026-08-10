@@ -182,7 +182,10 @@ function buildCommand(inputName, withAudio) {
     "-vf", "reverse", // Video rückwärts
     "-c:v", "libx264", // H.264 für breite Kompatibilität
     "-crf", "17", // niedrige Kompression → hohe Qualität
-    "-preset", "medium",
+    // Schnelles Preset: deutlich kürzere Verarbeitungszeit. Die Qualität
+    // bleibt (CRF-gesteuert) gleich, die Datei wird nur etwas größer –
+    // bei kurzen Videos (≲ 20 s) unkritisch.
+    "-preset", "veryfast",
     "-pix_fmt", "yuv420p", // Browser-kompatible Pixelfarbe
     "-movflags", "+faststart", // sofortiges Streamen/Abspielen
   ];

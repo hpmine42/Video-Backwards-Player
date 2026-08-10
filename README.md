@@ -12,8 +12,9 @@ Spiele **Video und Ton rückwärts** ab – bequem im Browser. Lade ein beliebig
 - ⏪ **Video rückwärts** (`reverse`) **und Audio rückwärts** (`areverse`).
 - 🔇 Videos **ohne Audiospur** werden automatisch erkannt und trotzdem verarbeitet.
 - 🎥 Unterstützt gängige Formate: **MP4, WebM, MOV, MKV, AVI, M4V, MPEG, 3GP** u. a. – alles, was FFmpeg.wasm lesen kann.
-- 🖼️ **Hohe Qualität:** Auflösung, Seitenverhältnis und Framerate bleiben erhalten; Re-Encoding mit `libx264` / `crf 17` (sehr geringe Kompression), `aac` 192 kbit/s, `+faststart`.
+- 🖼️ **Hohe Qualität & schnell:** Auflösung, Seitenverhältnis und Framerate bleiben erhalten; Re-Encoding mit `libx264` / `crf 17` (sehr geringe Kompression) und dem **schnellen Preset `veryfast`**, `aac` 192 kbit/s, `+faststart`.
 - ▶️ Ergebnis direkt im Browser **ansehen** und als **MP4 herunterladen**.
+- ⏪ **Live-Rückwärts-Vorschau:** das Video direkt im Browser sofort rückwärts ansehen – **ohne Wartezeit** und ohne Konvertierung (Bild; Ton gibt es rückwärts in der konvertierten Datei).
 - 🖱️ **Drag & Drop** oder Dateiauswahl.
 - 📱 Responsive, modernes **Apple-inspiriertes** Design (Glassmorphism, dunkles Theme).
 - 🔒 **Datenschutzfreundlich:** keine Analyse, keine Cookies, keine persönlichen Daten, Dateien werden nach Nutzung freigegeben.
@@ -102,7 +103,7 @@ Alle Pfade in diesem Projekt sind **relativ** (`./worker.js`), sodass auch Unter
    -map 0:a:0?
    -vf reverse
    -af areverse
-   -c:v libx264 -crf 17 -preset medium -pix_fmt yuv420p
+   -c:v libx264 -crf 17 -preset veryfast -pix_fmt yuv420p
    -c:a aac -b:a 192k
    -movflags +faststart
    output.mp4
@@ -124,6 +125,21 @@ Dieses Projekt umgeht das **konstruktiv**:
 - Core-Skript und WASM werden per `fetch()` geholt und in **Blob-URLs** (same-origin) umgewandelt. Das WASM wird über den offiziellen `mainScriptUrlOrBlob`-Mechanismus von ffmpeg.wasm geladen.
 
 Damit wird nirgendwo ein Worker aus einer fremden Origin gestartet.
+
+---
+
+## ⏪ Live-Rückwärts-Vorschau (ohne FFmpeg)
+
+Neben der Konvertierung gibt es einen **Sofort-Vorschaumodus**: Mit „⏪ Live rückwärts ansehen" wird das ausgewählte Video **direkt im Browser rückwärts abgespielt** – ohne Wartezeit und ohne FFmpeg.
+
+So funktioniert es technisch:
+
+- Das Video-Element läuft **vorwärts**, während die Seite es permanent um genau eine **Frame-Dauer zurückspult** (`currentTime`-Seeking). Das ergibt flüssiges Rückwärts-Abspielen.
+- Die Framerate wird automatisch erkannt: Beim normalen Abspielen misst `requestVideoFrameCallback` die echte Frame-Dauer; sonst gilt 30 fps als Standard.
+- Das Tempo wird **in Echtzeit geregelt**: Nach jedem Seek wird die tatsächliche Seek-Dauer gemessen und die Sprungweite daraus berechnet – die Rückwärtsgeschwindigkeit bleibt dadurch **immer ≈ 1× Echtzeit**, auch bei langsamen Seeks (dann werden entsprechend größere Sprünge gemacht).
+- Erreicht die Wiedergabe den Anfang, **loopt** sie zurück ans Videoende (Rückwärts-Loop).
+- **Ton** ist in der Live-Vorschau stummgeschaltet, weil sich Audio nicht per Seeking umkehren lässt. Rückwärts abgespielten Ton liefert die konvertierte Datei („↶ Video rückwärts erstellen").
+- Die Vorschau endet automatisch beim Kartenwechsel, beim Start der Konvertierung oder beim Verlassen der Seite.
 
 ---
 
